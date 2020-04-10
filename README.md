@@ -49,7 +49,7 @@ Example JSON File:
       "protocol": "tcp"
     }
   ]
-  "environmentVariables": [
+  "environment": [
     { "name": "ONE", "value": "ONE" }
     { "name": "TWO", "value": "TWO" }
   ],

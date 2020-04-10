@@ -1,0 +1,22 @@
+{
+  "cpu": 256,
+  "family": "integrations",
+  "image": "454882712799.dkr.ecr.us-east-1.amazonaws.com/integrations",
+  "memory": 500,
+  "protocol": "tcp",
+  "port_mappings": [
+    {
+      "hostPort": 0,
+      "containerPort": 4001,
+      "protocol": "tcp"
+    }
+  ],
+  "environment": [
+    { "name": "MIX_ENV", "value": "prod" }
+  ],
+  "deploymentConfiguration": {
+    "maximumPercent": 200,
+    "minimumHealthyPercent": 100
+  },
+  "desiredCount": 1
+}

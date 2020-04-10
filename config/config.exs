@@ -8,6 +8,10 @@ use Mix.Config
 # if you want to provide default values for your application for
 # 3rd-party users, it should be done in your "mix.exs" file.
 
+config :ecsbot, :aws,
+  service: Ecsbot.AWS.Service,
+  task_definition: Ecsbot.AWS.TaskDefinition
+
 # You can configure your application as:
 #
 #     config :ecsbot, key: :value
