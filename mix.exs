@@ -6,6 +6,7 @@ defmodule Ecsbot.MixProject do
       app: :ecsbot,
       version: "0.0.1",
       elixir: "~> 1.8",
+      elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       deps: deps()
     ]
@@ -18,6 +19,9 @@ defmodule Ecsbot.MixProject do
       extra_applications: [:mix, :logger, :slack, :timber]
     ]
   end
+
+  defp elixirc_paths(:test), do: ["lib", "test/mocks"]
+  defp elixirc_paths(_), do: ["lib"]
 
   # Run "mix help deps" to learn about dependencies.
   defp deps do
@@ -33,8 +37,7 @@ defmodule Ecsbot.MixProject do
       # TODO: Evaluate if this should be in
       {:timber, "~> 2.5"},
       {:httpoison, "~> 1.3"},
-      {:jason, "~> 1.2"},
-      {:mox, "~> 0.4", only: :test}
+      {:jason, "~> 1.2"}
       # {:dep_from_hexpm, "~> 0.3.0"},
       # {:dep_from_git, git: "https://github.com/elixir-lang/my_dep.git", tag: "0.1.0"},
     ]
