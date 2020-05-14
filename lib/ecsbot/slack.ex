@@ -2,17 +2,6 @@ defmodule Ecsbot.Slack do
   use Slack
   require Logger
 
-  defstruct(
-    action: nil,
-    channel: nil,
-    cluster_name: nil,
-    command: nil,
-    configuration: %{},
-    object: nil,
-    service_name: nil,
-    slack: nil
-  )
-
   def handle_connect(slack, state) do
     Logger.debug("Connected as #{slack.me.name}")
     {:ok, state}
@@ -38,7 +27,7 @@ defmodule Ecsbot.Slack do
     cond do
       Enum.at(txt, 0) == botname && user_verified ->
         try do
-          case Ecsbot.Command.command(Enum.at(txt, 1), txt, slack, slack_message.channel) do
+          case command(Enum.at(txt, 1), Enum.at(txt, 2), txt, slack, slack_message.channel) do
             {:ok, _} ->
               {:ok, state}
 
@@ -64,10 +53,10 @@ defmodule Ecsbot.Slack do
 
   def handle_event(_, _, state), do: {:ok, state}
 
-  def command(action, "service", txt, channel, slack) do
+  def command(action, "service", txt, slack, channel) do
     case Ecsbot.Configuration.fetch(Enum.at(txt, 3), Enum.at(txt, 4)) do
       {:ok, configuration} ->
-        slack = %Ecsbot.Slack{
+        slack = %Ecsbot.Command{
           action: action,
           channel: channel,
           command: txt,
@@ -78,7 +67,7 @@ defmodule Ecsbot.Slack do
           slack: slack
         }
 
-        Ecsbot.Slack.Service.command(slack)
+        Ecsbot.Command.command(slack)
 
       {:error, error} ->
         {:error, error}

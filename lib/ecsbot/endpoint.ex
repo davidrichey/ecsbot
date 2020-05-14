@@ -11,15 +11,29 @@ defmodule Ecsbot.Endpoint do
   plug(:dispatch)
 
   post "/command" do
-    IO.inspect(conn.body_params)
-
     case conn.body_params do
       %{"key" => key, "command" => command} ->
-        IO.inspect(valid(key))
-
         case valid(key) do
           :ok ->
-            command(command, conn)
+            txt = String.split(command, " ")
+
+            case command(Enum.at(txt, 1), Enum.at(txt, 2), txt, conn) do
+              {:ok, _} ->
+                conn |> send_resp(204, "")
+
+              {:no_reploy, _} ->
+                conn |> send_resp(204, "")
+
+              {:error, msg} ->
+                conn
+                |> put_resp_content_type("application/json")
+                |> send_resp(422, Jason.encode!(%{error: msg}))
+
+              {:reply, msg} ->
+                conn
+                |> put_resp_content_type("application/json")
+                |> send_resp(200, Jason.encode!(%{message: msg}))
+            end
 
           _ ->
             send_resp(conn, 404, "Page not found")
@@ -30,35 +44,24 @@ defmodule Ecsbot.Endpoint do
     end
   end
 
-  def command(text, conn) do
-    txt = String.split(text, " ")
-    # botname = Application.get_env(:ecsbot, :bot_name)
+  def command(action, "service", txt, conn) do
+    case Ecsbot.Configuration.fetch(Enum.at(txt, 3), Enum.at(txt, 4)) do
+      {:ok, configuration} ->
+        command = %Ecsbot.Command{
+          action: action,
+          command: txt,
+          conn: conn,
+          configuration: configuration,
+          cluster_name: Enum.at(txt, 3),
+          object: "service",
+          service_name: Enum.at(txt, 4)
+        }
 
-    # cond do
-    #   Enum.at(txt, 0) == botname ->
-    case Ecsbot.Command.command(Enum.at(txt, 1), txt, conn) do
-      {:ok, _} ->
-        conn |> send_resp(204, "")
+        Ecsbot.Command.command(command)
 
-      {:no_reploy, _} ->
-        conn |> send_resp(204, "")
-
-      {:error, msg} ->
-        conn
-        |> put_resp_content_type("application/json")
-        |> send_resp(422, Jason.encode!(%{error: msg}))
-
-      {:reply, msg, params} ->
-        conn
-        |> put_resp_content_type("application/json")
-        |> send_resp(200, Jason.encode!(%{message: msg, params: params}))
+      {:error, error} ->
+        {:error, error}
     end
-
-    #   true ->
-    #     conn
-    #     |> put_resp_content_type("application/json")
-    #     |> send_resp(422, Jason.encode!(%{error: "Invalid bot name"}))
-    # end
   end
 
   def valid(key) do

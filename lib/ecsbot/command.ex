@@ -1,58 +1,107 @@
 defmodule Ecsbot.Command do
-  require Logger
-
-  def command(c, txt, requestor, name \\ "")
+  defstruct(
+    action: nil,
+    channel: nil,
+    cluster_name: nil,
+    command: nil,
+    conn: nil,
+    configuration: %{},
+    object: nil,
+    service_name: nil,
+    slack: nil
+  )
 
   @doc """
-  Handles requestor deploys
-  botname deploy environment appname version
+  Handles slack ECS service creation
+  botname create service environment appname version
   Returns {:ok, _}
   """
-  def command("deploy", txt, _requestor, _name) do
-    environment = Enum.at(txt, 2)
-    name = Enum.at(txt, 3)
-    tag = Enum.at(txt, 4)
+  def command(slack = %Ecsbot.Command{action: "create", object: "service"}) do
+    tag = Enum.at(slack.command, 5)
 
-    case Ecsbot.AWS.Configuration.fetch(
-           Application.get_env(:ecsbot, :aws_bucket),
-           name,
-           environment
-         ) do
-      {:ok, aws_config} ->
-        {cds, family} =
-          Ecsbot.AWS.ContainerDefinition.build(%{"tag" => tag} |> Map.merge(aws_config))
+    configuration = slack.configuration || %{}
 
-        case Ecsbot.AWS.TaskDefinition.register(cds, family) do
-          {:ok, task} ->
-            service_opts = aws_config |> Map.merge(%{"taskDefinition" => task})
+    service =
+      struct(%Ecsbot.AWS.Service{}, %{
+        cluster: slack.cluster,
+        deployment_configuration: configuration.deploymentConfiguration,
+        desired_count: configuration.desiredCount,
+        service_name: slack.service_name
+      })
 
-            case Ecsbot.AWS.Service.update(service_opts) do
-              {:ok, {_, arn}} ->
-                msg =
-                  "Deployed #{tag} to #{name} #{environment}\n" <>
-                    "> task `#{task}` service `#{arn}`"
+    {container_definitions, family} =
+      Ecsbot.AWS.ContainerDefinition.build(slack, slack.configuration)
 
-                # Enqueue Check working
-                # %{"cluster" => cluster, "service" => service} = service_opts
-                #
+    Ecsbot.aws(:task_definition).register(container_definitions, family)
+
+    case Ecsbot.aws(:task_definition).register(container_definitions, family) do
+      {:ok, %Ecsbot.AWS.TaskDefinition{task_definition_arn: task_definition_arn}} ->
+        case Ecsbot.aws(:service).create(struct(service, %{task_definition: task_definition_arn})) do
+          {:ok, %Ecsbot.AWS.Service{service_arn: service_arn}} ->
+            :ok
+
+            {:reply,
+             "Created service for to `#{service.service_name}` (`#{service.cluster}`)\n" <>
+               "Deployed `#{tag}` to `#{service.service_name}` `#{service.cluster}`\n" <>
+               "> task `#{task_definition_arn}` service `#{service_arn}` tag `#{tag}`"}
+
+          {:error, msg} ->
+            {:error, msg}
+        end
+
+      {:error, error} ->
+        {:error, error}
+    end
+  end
+
+  # @doc """
+  # Handles slack deploys
+  # botname deploy cluster_name service_name tag
+  # Returns {:ok, _}
+  def command(
+        slack = %Ecsbot.Command{
+          action: "deploy",
+          command: command,
+          cluster_name: cluster_name,
+          service_name: service_name,
+          object: "service"
+        }
+      ) do
+    tag = Enum.at(command, 5)
+
+    case Ecsbot.aws(:service).describe(cluster_name, service_name) do
+      {:ok, service} ->
+        configuration = slack.configuration || %{}
+
+        {container_definitions, family} =
+          Ecsbot.AWS.ContainerDefinition.build(slack, configuration)
+
+        case Ecsbot.aws(:task_definition).register(container_definitions, family) do
+          {:ok, %Ecsbot.AWS.TaskDefinition{task_definition_arn: task_definition_arn}} ->
+            case Ecsbot.aws(:service).update(
+                   struct(service, %{task_definition: task_definition_arn})
+                 ) do
+              {:ok, %Ecsbot.AWS.Service{service_arn: service_arn}} ->
+                # TODO:
                 # Ecsbot.Supervisor.CheckSupervisor.enqueue({
                 #   service,
                 #   cluster,
                 #   task,
-                #   name,
-                #   requestor,
+                #   channel,
+                #   slack,
                 #   1
                 # })
 
-                {:reply, msg,
-                 %{tag: tag, name: name, environment: environment, task: task, arn: arn}}
+                {:reply,
+                 "Deployed `#{tag}` to `#{service.service_name}` `#{cluster_name}`\n" <>
+                   "> task `#{task_definition_arn}` service `#{service_arn}` tag `#{tag}`"}
 
               {:error, msg} ->
                 {:error, msg}
             end
 
-          {:error, msg} ->
-            {:error, msg}
+          {:error, error} ->
+            {:error, error}
         end
 
       {:error, error} ->
@@ -61,118 +110,71 @@ defmodule Ecsbot.Command do
   end
 
   @doc """
-  Handles requestor scaling events
-  botname scale environment appname desired_count
-  Returns {:ok, _}
-  """
-  def command("scale", txt, _channel, _slack) do
-    environment = Enum.at(txt, 2)
-    name = Enum.at(txt, 3)
-
-    case Ecsbot.AWS.Configuration.fetch(
-           Application.get_env(:ecsbot, :aws_bucket),
-           name,
-           environment
-         ) do
-      {:ok, aws_config} ->
-        %{"cluster" => cluster, "service" => service} = aws_config
-
-        desired_count =
-          case Enum.at(txt, 4) do
-            "up" ->
-              case Ecsbot.AWS.Service.describe(service, cluster) do
-                {:ok, %{"desiredCount" => count}} -> {:ok, count + 1}
-                {:error, msg} -> {:error, msg}
-              end
-
-            "down" ->
-              case Ecsbot.AWS.Service.describe(service, cluster) do
-                {:ok, %{"desiredCount" => count}} -> {:ok, count - 1}
-                {:error, msg} -> {:error, msg}
-              end
-
-            count ->
-              {:ok, String.to_integer(count)}
-          end
-
-        case desired_count do
-          {:ok, desired_count} ->
-            service_opts = aws_config |> Map.merge(%{"desiredCount" => desired_count})
-
-            case Ecsbot.AWS.Service.update(service_opts) do
-              {:ok, {desired_count, arn}} ->
-                msg =
-                  "Scaled #{name} `#{environment}` to #{desired_count}\n" <> "> service `#{arn}`"
-
-                {:reply, msg,
-                 %{name: name, environment: environment, desired_count: desired_count, arn: arn}}
-
-              {:error, msg} ->
-                {:error, msg}
-            end
-
-          {:error, msg} ->
-            {:error, msg}
-        end
-
-      {:error, error} ->
-        {:error, error}
-    end
-  end
-
-  @doc """
-  Handles requestor scaling events
+  Handles slack scaling events
   botname describe environment appname
   Returns {:ok, _}
   """
-  def command("describe", txt, _channel, _slack) do
-    environment = Enum.at(txt, 2)
-    name = Enum.at(txt, 3)
+  def command(%Ecsbot.Command{
+        action: "describe",
+        object: "service",
+        cluster_name: cluster_name,
+        service_name: service_name
+      }) do
+    case Ecsbot.aws(:service).describe(cluster_name, service_name) do
+      {:ok, service} ->
+        [deployment | _] = service.deployments
 
-    case Ecsbot.AWS.Configuration.fetch(
-           Application.get_env(:ecsbot, :aws_bucket),
-           name,
-           environment
-         ) do
-      {:ok, %{"cluster" => cluster, "service" => service}} ->
-        case Ecsbot.AWS.Service.describe(service, cluster) do
-          {:ok,
-           %{
-             "deployments" => deployments,
-             "taskDefinition" => td,
-             "serviceName" => service_name
-           }} ->
-            deployment =
-              Enum.find(deployments, fn d ->
-                d["taskDefinition"] == td
-              end)
+        msg =
+          "> #{service_name} (#{cluster_name})\n" <>
+            "> Tasks running `#{deployment[:runningCount]} / #{deployment[:desiredCount]}`\n" <>
+            "> Task    `#{service.task_definition}`\n" <>
+            "> Service `#{service.service_name}`\n" <>
+            "> Cluster `#{cluster_name}`\n" <>
+            "> AWS: https://console.aws.amazon.com/ecs/home?" <>
+            "#/clusters/#{cluster_name}/services/#{service.service_name}/tasks"
 
-            case deployment do
-              nil ->
-                {:error, ":warning: No deployment found for #{td}"}
+        {:reply, msg}
 
-              _ ->
-                msg =
-                  ">#{name} (#{environment})\n" <>
-                    "> Tasks running `#{deployment["runningCount"]} / #{
-                      deployment["desiredCount"]
-                    }`\n" <>
-                    ">Task      `#{td}`\n>Service `#{service_name}`\n>Cluster `#{cluster}`\n" <>
-                    "> AWS: https://console.aws.amazon.com/ecs/home?" <>
-                    "#/clusters/#{cluster}/services/#{service}/tasks"
+      {:error, error} ->
+        {:error, error}
+    end
+  end
 
-                {:reply, msg,
-                 %{
-                   name: name,
-                   environment: environment,
-                   task_definitiond: td,
-                   service_name: service_name,
-                   cluster: cluster,
-                   service: service,
-                   runningCount: deployment["runningCount"],
-                   desiredCount: deployment["desiredCount"]
-                 }}
-            end
+  @doc """
+  Handles slack scaling events
+  botname scale environment appname desired_count
+  Returns {:ok, _}
+  """
+  def command(%Ecsbot.Command{
+        action: "scale",
+        object: "service",
+        command: command,
+        cluster_name: cluster_name,
+        service_name: service_name
+      }) do
+    case Ecsbot.aws(:service).describe(cluster_name, service_name) do
+      {:ok, service} ->
+        desired_count =
+          case Enum.at(command, 5) do
+            "up" ->
+              service.desired_count + 1
+
+            "down" ->
+              service.desired_count - 1
+
+            count ->
+              String.to_integer(count)
+          end
+
+        service = struct(service, %{desired_count: desired_count})
+
+        case Ecsbot.aws(:service).update(service) do
+          {:ok, service} ->
+            msg =
+              "Scaled `#{service_name}` to #{service.desired_count}\n" <>
+                "> service `#{service.service_arn}` cluster `#{cluster_name}`"
+
+            {:reply, msg}
 
           {:error, msg} ->
             {:error, msg}
@@ -181,73 +183,5 @@ defmodule Ecsbot.Command do
       {:error, msg} ->
         {:error, msg}
     end
-  end
-
-  @doc """
-  Handles requestor ECS service creation
-  botname create-service environment appname version
-  Returns {:ok, _}
-  """
-  def command("create-service", txt, _requestor, _name) do
-    environment = Enum.at(txt, 2)
-    name = Enum.at(txt, 3)
-    tag = Enum.at(txt, 4)
-
-    case Ecsbot.AWS.Configuration.fetch(
-           Application.get_env(:ecsbot, :aws_bucket),
-           name,
-           environment
-         ) do
-      {:ok, aws_config} ->
-        {cds, family} =
-          Ecsbot.AWS.ContainerDefinition.build(%{"tag" => tag} |> Map.merge(aws_config))
-
-        case Ecsbot.AWS.TaskDefinition.register(cds, family) do
-          {:ok, task} ->
-            service_opts = aws_config |> Map.merge(%{"taskDefinition" => task})
-
-            case Ecsbot.AWS.Service.create(service_opts) do
-              {:ok, {_, arn}} ->
-                msg =
-                  "Created service for to #{name} (#{environment})\n" <>
-                    "Deployed #{tag} to #{name} #{environment}\n" <>
-                    "> task `#{task}` service `#{arn}`"
-
-                # Enqueue Check working
-                # %{"cluster" => cluster, "service" => service} = service_opts
-                #
-                # Ecsbot.Supervisor.CheckSupervisor.enqueue({
-                #   service,
-                #   cluster,
-                #   task,
-                #   name,
-                #   requestor,
-                #   1
-                # })
-
-                {:reply, msg,
-                 %{
-                   name: name,
-                   environment: environment,
-                   tag: tag,
-                   task: task,
-                   arn: arn
-                 }}
-
-              {:error, msg} ->
-                {:error, msg}
-            end
-
-          {:error, msg} ->
-            {:error, msg}
-        end
-
-      {:error, error} ->
-        {:error, error}
-    end
-  end
-
-  def command(cmd, _, _, _) do
-    {:error, "Unknown command `#{cmd}`"}
   end
 end

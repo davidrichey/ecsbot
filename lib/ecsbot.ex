@@ -26,6 +26,22 @@ defmodule Ecsbot do
 
   def aws(module), do: Application.get_env(:ecsbot, :aws)[module]
 
+  def camel_map(map, all \\ [])
+
+  def camel_map(nil, _), do: %{}
+
+  def camel_map(map, _) when is_map(map) do
+    Enum.into(map, []) |> camel_map([])
+  end
+
+  def camel_map([{key, v} | t], list) do
+    <<head::binary-size(1)>> <> rest = Macro.camelize(key)
+    camel_map(t, [{"#{String.downcase(head)}#{rest}", v} | list])
+  end
+
+  def camel_map([], list),
+    do: Enum.into(list, %{}) |> atomize_keys()
+
   def snake_map(map, all \\ [])
 
   def snake_map(nil, _), do: %{}
