@@ -37,7 +37,12 @@ defmodule Ecsbot.MixProject do
       # TODO: Evaluate if this should be in
       {:timber, "~> 2.5"},
       {:httpoison, "~> 1.3"},
-      {:jason, "~> 1.2"}
+      {:jason, "~> 1.2"},
+      {:plug, "~> 1.10"},
+      {:cowboy, "~> 2.7"},
+      {:plug_cowboy, "~> 2.0"},
+      {:mox, "~> 0.4", only: :test}
+
       # {:dep_from_hexpm, "~> 0.3.0"},
       # {:dep_from_git, git: "https://github.com/elixir-lang/my_dep.git", tag: "0.1.0"},
     ]

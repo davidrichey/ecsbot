@@ -3,16 +3,20 @@ defmodule Ecsbot do
   import Supervisor.Spec
 
   def start(_, _) do
-    case Mix.env() do
-      :test ->
-        Task.start(fn -> :timer.sleep(0) end)
+    opts = [strategy: :one_for_one, name: Ecsbot.Supervisor]
+
+    case Application.get_env(:ecsbot, :slack_enabled) do
+      "true" ->
+        children = [
+          Ecsbot.Endpoint,
+          supervisor(Ecsbot.Supervisor.CheckSupervisor, [])
+        ]
+
+        Supervisor.start_link(children, opts)
+        Slack.Bot.start_link(Ecsbot.Slack, [], Application.get_env(:ecsbot, :slack_api_key))
 
       _ ->
-        # opts = [strategy: :one_for_one, name: Ecsbot.Supervisor]
-        # children = [supervisor(Ecsbot.Supervisor.CheckSupervisor, [])]
-        # Supervisor.start_link(children, opts)
-        # Slack.Bot.start_link(Ecsbot.Slack, [], Application.get_env(:ecsbot, :slack_api_key))
-        Task.start(fn -> :timer.sleep(0) end)
+        Supervisor.start_link([Ecsbot.Endpoint], opts)
     end
   end
 

@@ -38,7 +38,7 @@ defmodule Ecsbot.Slack do
     cond do
       Enum.at(txt, 0) == botname && user_verified ->
         try do
-          case command(Enum.at(txt, 1), Enum.at(txt, 2), txt, slack_message.channel, slack) do
+          case Ecsbot.Command.command(Enum.at(txt, 1), txt, slack, slack_message.channel) do
             {:ok, _} ->
               {:ok, state}
 
@@ -49,7 +49,7 @@ defmodule Ecsbot.Slack do
               send_message(":warning: #{msg}", slack_message.channel, slack)
               {:ok, msg}
 
-            {:reply, msg} ->
+            {:reply, msg, _} ->
               send_message(msg, slack_message.channel, slack)
               {:ok, msg}
           end
