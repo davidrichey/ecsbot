@@ -1,17 +1,29 @@
-defmodule Ecsbot.Slack.Service do
+defmodule Ecsbot.Command do
+  defstruct(
+    action: nil,
+    channel: nil,
+    cluster_name: nil,
+    command: nil,
+    conn: nil,
+    configuration: %{},
+    object: nil,
+    service_name: nil,
+    slack: nil
+  )
+
   @doc """
   Handles slack ECS service creation
   botname create service environment appname version
   Returns {:ok, _}
   """
-  def command(slack = %Ecsbot.Slack{action: "create", object: "service"}) do
+  def command(slack = %Ecsbot.Command{action: "create", object: "service"}) do
     tag = Enum.at(slack.command, 5)
 
     configuration = slack.configuration || %{}
 
     service =
       struct(%Ecsbot.AWS.Service{}, %{
-        cluster_name: slack.cluster_name,
+        cluster: slack.cluster_name,
         deployment_configuration: configuration.deploymentConfiguration,
         desired_count: configuration.desiredCount,
         service_name: slack.service_name
@@ -29,8 +41,8 @@ defmodule Ecsbot.Slack.Service do
             :ok
 
             {:reply,
-             "Created service for to `#{service.service_name}` (`#{service.cluster_name}`)\n" <>
-               "Deployed `#{tag}` to `#{service.service_name}` `#{service.cluster_name}`\n" <>
+             "Created service for to `#{service.service_name}` (`#{service.cluster}`)\n" <>
+               "Deployed `#{tag}` to `#{service.service_name}` `#{service.cluster}`\n" <>
                "> task `#{task_definition_arn}` service `#{service_arn}` tag `#{tag}`"}
 
           {:error, msg} ->
@@ -47,7 +59,7 @@ defmodule Ecsbot.Slack.Service do
   # botname deploy cluster_name service_name tag
   # Returns {:ok, _}
   def command(
-        slack = %Ecsbot.Slack{
+        slack = %Ecsbot.Command{
           action: "deploy",
           command: command,
           cluster_name: cluster_name,
@@ -62,7 +74,7 @@ defmodule Ecsbot.Slack.Service do
         configuration = slack.configuration || %{}
 
         {container_definitions, family} =
-          Ecsbot.AWS.ContainerDefinition.build(slack, configuration)
+          Ecsbot.AWS.ContainerDefinition.build(slack, configuration, tag)
 
         case Ecsbot.aws(:task_definition).register(container_definitions, family) do
           {:ok, %Ecsbot.AWS.TaskDefinition{task_definition_arn: task_definition_arn}} ->
@@ -102,7 +114,7 @@ defmodule Ecsbot.Slack.Service do
   botname describe environment appname
   Returns {:ok, _}
   """
-  def command(%Ecsbot.Slack{
+  def command(%Ecsbot.Command{
         action: "describe",
         object: "service",
         cluster_name: cluster_name,
@@ -133,7 +145,7 @@ defmodule Ecsbot.Slack.Service do
   botname scale environment appname desired_count
   Returns {:ok, _}
   """
-  def command(%Ecsbot.Slack{
+  def command(%Ecsbot.Command{
         action: "scale",
         object: "service",
         command: command,

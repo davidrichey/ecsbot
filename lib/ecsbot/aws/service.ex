@@ -3,6 +3,7 @@ defmodule Ecsbot.AWS.Service do
 
   @derive Jason.Encoder
   defstruct(
+    cluster: nil,
     cluster_name: nil,
     cluster_arn: nil,
     created_at: nil,
@@ -31,7 +32,7 @@ defmodule Ecsbot.AWS.Service do
            service.service_name,
            service.task_definition,
            service.desired_count,
-           service |> Jason.encode!() |> Jason.decode!()
+           service |> Jason.encode!() |> Jason.decode!() |> Ecsbot.camel_map()
          )
          |> ExAws.request() do
       {:ok, %{"service" => service}} ->
@@ -51,7 +52,7 @@ defmodule Ecsbot.AWS.Service do
   def update(service) do
     case ExAws.ECS.update_service(
            service.service_name,
-           service |> Jason.encode!() |> Jason.decode!()
+           service |> Jason.encode!() |> Jason.decode!() |> Ecsbot.camel_map()
          )
          |> ExAws.request() do
       {:ok, %{"service" => service}} ->
@@ -74,7 +75,7 @@ defmodule Ecsbot.AWS.Service do
       {:ok, %{"services" => services}} ->
         service = services |> Enum.at(0)
         service = Ecsbot.snake_map(service)
-        {:ok, struct(%Ecsbot.AWS.Service{}, service)}
+        {:ok, struct(%Ecsbot.AWS.Service{cluster: cluster}, service)}
 
       {:error, {:http_error, status, %{body: body}}} ->
         Logger.warn("AWS Service Describe Error: #{body}")

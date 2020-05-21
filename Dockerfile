@@ -1,4 +1,4 @@
-FROM bitwalker/alpine-elixir:1.6.6 as builder
+FROM bitwalker/alpine-elixir:1.8.2 as builder
 
 ADD . /app
 
@@ -9,7 +9,7 @@ ENV MIX_ENV=prod REPLACE_OS_VARS=true
 RUN mix do deps.get, deps.compile, release
 
 ###############################################
-FROM alpine:3.6
+FROM alpine:3.9.3
 
 RUN apk add --no-cache bash
 

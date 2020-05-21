@@ -14,6 +14,10 @@ defmodule Ecsbot.AWS.TaskDefinition do
   )
 
   def register(container_definitions, family) do
+    container_definitions =
+      container_definitions
+      |> Enum.map(fn cd -> cd |> Jason.encode!() |> Jason.decode!() |> Ecsbot.camel_map() end)
+
     case ExAws.ECS.register_task_definition(family, container_definitions) |> ExAws.request() do
       {:ok, %{"taskDefinition" => task_definition}} ->
         task_definition = Ecsbot.snake_map(task_definition)
