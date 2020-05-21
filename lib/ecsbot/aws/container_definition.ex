@@ -30,7 +30,7 @@ defmodule Ecsbot.AWS.ContainerDefinition do
     working_directory: nil
   )
 
-  def build(slack, configuration) do
+  def build(slack, configuration, tag) do
     defaults = %Ecsbot.AWS.ContainerDefinition{}
 
     container_definition =
@@ -51,7 +51,7 @@ defmodule Ecsbot.AWS.ContainerDefinition do
         essential: configuration[:essential] || defaults.essential,
         extra_hosts: configuration[:extraHosts] || defaults.extra_hosts,
         hostname: configuration[:hostname] || defaults.hostname,
-        image: configuration[:image] || defaults.image,
+        image: "#{configuration[:image] || defaults.image}:#{tag}",
         links: configuration[:links] || defaults.links,
         log_configuration: configuration[:logConfiguration] || defaults.log_configuration,
         memory: configuration[:memory] || defaults.memory,

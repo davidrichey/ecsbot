@@ -1,5 +1,6 @@
 defmodule Ecsbot.Endpoint do
   use Plug.Router
+  require Logger
 
   plug(:match)
 
@@ -10,14 +11,15 @@ defmodule Ecsbot.Endpoint do
 
   plug(:dispatch)
 
-  post "/command" do
+  post "/ecsbot/command" do
     case conn.body_params do
-      %{"key" => key, "command" => command} ->
+      %{"key" => key, "command" => cmd} ->
         case valid(key) do
           :ok ->
-            txt = String.split(command, " ")
+            txt = String.split(cmd, " ")
+            cmd = command(Enum.at(txt, 1), Enum.at(txt, 2), txt, conn)
 
-            case command(Enum.at(txt, 1), Enum.at(txt, 2), txt, conn) do
+            case cmd do
               {:ok, _} ->
                 conn |> send_resp(204, "")
 
@@ -36,12 +38,19 @@ defmodule Ecsbot.Endpoint do
             end
 
           _ ->
+            Logger.info("Not valid request")
             send_resp(conn, 404, "Page not found")
         end
 
       _ ->
         send_resp(conn, 404, "Page not found")
     end
+  end
+
+  get "/ecsbot" do
+    conn
+    |> put_resp_content_type("application/json")
+    |> send_resp(200, Jason.encode!(%{time: DateTime.utc_now() |> DateTime.to_iso8601()}))
   end
 
   def command(action, "service", txt, conn) do

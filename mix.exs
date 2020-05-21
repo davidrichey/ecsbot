@@ -4,8 +4,8 @@ defmodule Ecsbot.MixProject do
   def project do
     [
       app: :ecsbot,
-      version: "0.0.1",
-      elixir: "~> 1.8",
+      version: "0.1.0",
+      elixir: "~> 1.6",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       deps: deps()

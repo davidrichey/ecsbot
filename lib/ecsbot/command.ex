@@ -23,7 +23,7 @@ defmodule Ecsbot.Command do
 
     service =
       struct(%Ecsbot.AWS.Service{}, %{
-        cluster: slack.cluster,
+        cluster: slack.cluster_name,
         deployment_configuration: configuration.deploymentConfiguration,
         desired_count: configuration.desiredCount,
         service_name: slack.service_name
@@ -74,7 +74,7 @@ defmodule Ecsbot.Command do
         configuration = slack.configuration || %{}
 
         {container_definitions, family} =
-          Ecsbot.AWS.ContainerDefinition.build(slack, configuration)
+          Ecsbot.AWS.ContainerDefinition.build(slack, configuration, tag)
 
         case Ecsbot.aws(:task_definition).register(container_definitions, family) do
           {:ok, %Ecsbot.AWS.TaskDefinition{task_definition_arn: task_definition_arn}} ->
