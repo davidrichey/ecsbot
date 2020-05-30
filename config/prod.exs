@@ -2,6 +2,8 @@ use Mix.Config
 
 config :ecsbot,
   slack_api_key: "${SLACK_API_KEY}",
+  slack_enabled: "${SLACK_ENABLED}",
+  web_api_key: "${WEB_API_KEY}",
   aws_bucket: "${AWS_BUCKET}",
   bot_name: "${BOT_NAME}",
   users: "${USERS}"

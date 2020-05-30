@@ -1,12 +1,27 @@
 defmodule Ecsbot.AWS.TaskDefinition do
   require Logger
-  @callback register(list(), String.t()) :: tuple()
+  @derive Jason.Encoder
+  defstruct(
+    compatibilities: [],
+    container_definitions: [],
+    family: nil,
+    placement_constraints: [],
+    requires_attributes: [],
+    revision: nil,
+    status: nil,
+    task_definition_arn: nil,
+    volumes: nil
+  )
 
   def register(container_definitions, family) do
+    container_definitions =
+      container_definitions
+      |> Enum.map(fn cd -> cd |> Jason.encode!() |> Jason.decode!() |> Ecsbot.camel_map() end)
+
     case ExAws.ECS.register_task_definition(family, container_definitions) |> ExAws.request() do
-      {:ok, %{"taskDefinition" => %{"taskDefinitionArn" => arn}}} ->
-        Logger.debug("AWS Task Registration ARN: #{arn}")
-        {:ok, arn}
+      {:ok, %{"taskDefinition" => task_definition}} ->
+        task_definition = Ecsbot.snake_map(task_definition)
+        {:ok, struct(%Ecsbot.AWS.TaskDefinition{}, task_definition)}
 
       {:error, {:http_error, status, %{body: body}}} ->
         Logger.warn("AWS Task Registration Error: #{body}")
